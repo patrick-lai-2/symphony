@@ -1,7 +1,17 @@
 ---
 tracker:
-  kind: linear
-  project_slug: "symphony-0c79b11b75ea"
+  kind: memory # choose: memory | linear | jira
+  # Linear sample:
+  # kind: linear
+  # project_slug: "symphony-0c79b11b75ea"
+  # endpoint: "https://api.linear.app/graphql"
+  # api_key: "$LINEAR_API_KEY"
+  # Jira sample:
+  # kind: jira
+  # project_slug: "PROJ"
+  # endpoint: "https://your-domain.atlassian.net"
+  # email: "$JIRA_EMAIL"
+  # api_key: "$JIRA_API_TOKEN"
   active_states:
     - Todo
     - In Progress
@@ -36,7 +46,7 @@ codex:
     type: workspaceWrite
 ---
 
-You are working on a Linear ticket `{{ issue.identifier }}`
+You are working on tracker issue `{{ issue.identifier }}`
 
 {% if attempt %}
 Continuation context:
@@ -69,9 +79,9 @@ Instructions:
 
 Work only in the provided repository copy. Do not touch any other path.
 
-## Prerequisite: Linear MCP or `linear_graphql` tool is available
+## Prerequisite: tracker access is available
 
-The agent should be able to talk to Linear, either via a configured Linear MCP server or injected `linear_graphql` tool. If none are present, stop and ask the user to configure Linear.
+The agent should be able to read and update the configured tracker via an MCP server, injected app-server tool, or repository skill. If none are present, stop and ask the user to configure tracker access.
 
 ## Default posture
 
@@ -80,14 +90,14 @@ The agent should be able to talk to Linear, either via a configured Linear MCP s
 - Spend extra effort up front on planning and verification design before implementation.
 - Reproduce first: always confirm the current behavior/issue signal before changing code so the fix target is explicit.
 - Keep ticket metadata current (state, checklist, acceptance criteria, links).
-- Treat a single persistent Linear comment as the source of truth for progress.
+- Treat a single persistent tracker comment as the source of truth for progress.
 - Use that single workpad comment for all progress and handoff notes; do not post separate "done"/summary comments.
 - Treat any ticket-authored `Validation`, `Test Plan`, or `Testing` section as non-negotiable acceptance input: mirror it in the workpad and execute it before considering the work complete.
 - When meaningful out-of-scope improvements are discovered during execution,
-  file a separate Linear issue instead of expanding scope. The follow-up issue
+  file a separate tracker issue instead of expanding scope. The follow-up issue
   must include a clear title, description, and acceptance criteria, be placed in
   `Backlog`, be assigned to the same project as the current issue, link the
-  current issue as `related`, and use `blockedBy` when the follow-up depends on
+  current issue as related, and record a dependency when the follow-up depends on
   the current issue.
 - Move status only when the matching quality bar is met.
 - Operate autonomously end-to-end unless blocked by missing requirements, secrets, or permissions.
@@ -95,7 +105,7 @@ The agent should be able to talk to Linear, either via a configured Linear MCP s
 
 ## Related skills
 
-- `linear`: interact with Linear.
+- Tracker-specific skill/tooling: interact with the configured issue tracker.
 - `commit`: produce clean, logical commits during implementation.
 - `push`: keep remote branch current and publish updates.
 - `pull`: keep branch updated with latest `origin/main` before handoff.
@@ -151,7 +161,7 @@ The agent should be able to talk to Linear, either via a configured Linear MCP s
 5.  Ensure the workpad includes a compact environment stamp at the top as a code fence line:
     - Format: `<host>:<abs-workdir>@<short-sha>`
     - Example: `devbox-01:/home/dev-user/code/symphony-workspaces/MT-32@7bdde33bc`
-    - Do not include metadata already inferable from Linear issue fields (`issue ID`, `status`, `branch`, `PR link`).
+    - Do not include metadata already inferable from tracker issue fields (`issue ID`, `status`, `branch`, `PR link`).
 6.  Add explicit acceptance criteria and TODOs in checklist form in the same comment.
     - If changes are user-facing, include a UI walkthrough acceptance criterion that describes the end-to-end user path to validate.
     - If changes touch app files or app behavior, add explicit app-specific flow checks to `Acceptance Criteria` in the workpad (for example: launch path, changed interaction path, and expected result path).
@@ -281,8 +291,8 @@ Use this only when completion is blocked by missing required tools or missing au
 - If out-of-scope improvements are found, create a separate Backlog issue rather
   than expanding current scope, and include a clear
   title/description/acceptance criteria, same-project assignment, a `related`
-  link to the current issue, and `blockedBy` when the follow-up depends on the
-  current issue.
+  link to the current issue, and record a dependency when the follow-up depends
+  on the current issue.
 - Do not move to `Human Review` unless the `Completion bar before Human Review` is satisfied.
 - In `Human Review`, do not make changes; wait and poll.
 - If state is terminal (`Done`), do nothing and shut down.

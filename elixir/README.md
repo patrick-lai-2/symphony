@@ -13,15 +13,16 @@ This directory contains the current Elixir/OTP implementation of Symphony, based
 
 ## How it works
 
-1. Polls Linear for candidate work
+1. Polls the configured issue tracker for candidate work
 2. Creates a workspace per issue
 3. Launches Codex in [App Server mode](https://developers.openai.com/codex/app-server/) inside the
    workspace
 4. Sends a workflow prompt to Codex
 5. Keeps Codex working on the issue until the work is done
 
-During app-server sessions, Symphony also serves a client-side `linear_graphql` tool so that repo
-skills can make raw Linear GraphQL calls.
+When `tracker.kind: linear`, app-server sessions also expose a client-side `linear_graphql`
+tool so that repo skills can make raw Linear GraphQL calls. Jira workflows talk to Jira directly
+through their own MCP server or repo skill.
 
 If a claimed issue moves to a terminal state (`Done`, `Closed`, `Cancelled`, or `Duplicate`),
 Symphony stops the active agent for that issue and cleans up matching workspaces.
@@ -30,18 +31,24 @@ Symphony stops the active agent for that issue and cleans up matching workspaces
 
 1. Make sure your codebase is set up to work well with agents: see
    [Harness engineering](https://openai.com/index/harness-engineering/).
-2. Get a new personal token in Linear via Settings → Security & access → Personal API keys, and
-   set it as the `LINEAR_API_KEY` environment variable.
+2. Provision tracker credentials and export them in your shell:
+   - Linear: create a personal token via Settings → Security & access → Personal API keys, and
+     export it as `LINEAR_API_KEY`.
+   - Jira: create an API token at https://id.atlassian.com/manage-profile/security/api-tokens,
+     and export `JIRA_EMAIL` and `JIRA_API_TOKEN` (or `ATLASSIAN_EMAIL` and
+     `ATLASSIAN_API_TOKEN`).
 3. Copy this directory's `WORKFLOW.md` to your repo.
-4. Optionally copy the `commit`, `push`, `pull`, `land`, and `linear` skills to your repo.
-   - The `linear` skill expects Symphony's `linear_graphql` app-server tool for raw Linear GraphQL
-     operations such as comment editing or upload flows.
+4. Optionally copy the `commit`, `push`, `pull`, and `land` skills to your repo. Add a
+   tracker-specific skill for the tracker you use (for example a `linear` skill backed by the
+   `linear_graphql` app-server tool when `tracker.kind: linear`, or your own Jira skill when
+   `tracker.kind: jira`).
 5. Customize the copied `WORKFLOW.md` file for your project.
-   - To get your project's slug, right-click the project and copy its URL. The slug is part of the
-     URL.
-   - When creating a workflow based on this repo, note that it depends on non-standard Linear
-     issue statuses: "Rework", "Human Review", and "Merging". You can customize them in
-     Team Settings → Workflow in Linear.
+   - Linear: get your project slug by right-clicking the project and copying its URL — the slug
+     is part of the URL.
+   - Jira: use the project key (for example `PROJ`) as `tracker.project_slug`.
+   - The workflow depends on non-standard tracker statuses: "Rework", "Human Review", and
+     "Merging". Configure equivalent statuses in your tracker (Linear Team Settings → Workflow,
+     or Jira project workflow scheme).
 6. Follow the instructions below to install the required runtime dependencies and start the service.
 
 ## Prerequisites
@@ -83,12 +90,12 @@ Optional flags:
 The `WORKFLOW.md` file uses YAML front matter for configuration, plus a Markdown body used as the
 Codex session prompt.
 
-Minimal example:
+Minimal example (tracker-neutral):
 
 ```md
 ---
 tracker:
-  kind: linear
+  kind: memory # choose: memory | linear | jira
   project_slug: "..."
 workspace:
   root: ~/code/workspaces
@@ -102,13 +109,38 @@ codex:
   command: codex app-server
 ---
 
-You are working on a Linear issue {{ issue.identifier }}.
+You are working on issue {{ issue.identifier }}.
 
 Title: {{ issue.title }} Body: {{ issue.description }}
 ```
 
-Notes:
+Tracker adapters (choose one for `tracker.kind`):
 
+- `linear`:
+
+  ```yaml
+  tracker:
+    kind: linear
+    project_slug: "your-linear-project-slug"
+    endpoint: "https://api.linear.app/graphql"
+    api_key: "$LINEAR_API_KEY"
+  ```
+
+- `jira`:
+
+  ```yaml
+  tracker:
+    kind: jira
+    project_slug: "PROJ"
+    endpoint: "https://your-domain.atlassian.net"
+    email: "$JIRA_EMAIL"
+    api_key: "$JIRA_API_TOKEN"
+  ```
+
+Custom adapters can be wired in via the
+`:symphony_elixir, :tracker_module` application env override.
+
+Notes:
 - If a value is missing, defaults are used.
 - Safer Codex defaults are used when policy fields are omitted:
   - `codex.approval_policy` defaults to `{"reject":{"sandbox_approval":true,"rules":true,"mcp_elicitations":true}}`
@@ -127,7 +159,10 @@ Notes:
   `git clone ... .` there, along with any other setup commands you need.
 - If a hook needs `mise exec` inside a freshly cloned workspace, trust the repo config and fetch
   the project dependencies in `hooks.after_create` before invoking `mise` later from other hooks.
-- `tracker.api_key` reads from `LINEAR_API_KEY` when unset or when value is `$LINEAR_API_KEY`.
+- `tracker.api_key` falls back to environment variables when unset or set to `$VAR`:
+  - `tracker.kind: linear` → `LINEAR_API_KEY`.
+  - `tracker.kind: jira` → `JIRA_API_TOKEN`, then `ATLASSIAN_API_TOKEN`.
+- `tracker.email` (Jira only) falls back to `JIRA_EMAIL`, then `ATLASSIAN_EMAIL`.
 - For path values, `~` is expanded to the home directory.
 - For env-backed path values, use `$VAR`. `workspace.root` resolves `$VAR` before path handling,
   while `codex.command` stays a shell command string and any `$VAR` expansion there happens in the
@@ -135,7 +170,7 @@ Notes:
 
 ```yaml
 tracker:
-  api_key: $LINEAR_API_KEY
+  api_key: $LINEAR_API_KEY # or $JIRA_API_TOKEN when tracker.kind: jira
 workspace:
   root: $SYMPHONY_WORKSPACE_ROOT
 hooks:
@@ -199,9 +234,9 @@ the transport representative without depending on long-lived external machines.
 
 Set `SYMPHONY_LIVE_SSH_WORKER_HOSTS` if you want `make e2e` to target real SSH hosts instead.
 
-The live test creates a temporary Linear project and issue, writes a temporary `WORKFLOW.md`, runs
+The live test creates temporary Linear resources, writes a temporary `WORKFLOW.md`, runs
 a real agent turn, verifies the workspace side effect, requires Codex to comment on and close the
-Linear issue, then marks the project completed so the run remains visible in Linear.
+issue, then marks the project completed so the run remains visible in the tracker.
 
 ## FAQ
 

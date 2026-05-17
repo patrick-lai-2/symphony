@@ -98,7 +98,7 @@ defmodule SymphonyElixir.CoreTest do
 
     tracker = Map.get(config, "tracker", %{})
     assert is_map(tracker)
-    assert Map.get(tracker, "kind") == "linear"
+    assert Map.get(tracker, "kind") in ["linear", "jira", "memory"]
     assert is_binary(Map.get(tracker, "project_slug"))
     assert is_list(Map.get(tracker, "active_states"))
     assert is_list(Map.get(tracker, "terminal_states"))
@@ -883,8 +883,7 @@ defmodule SymphonyElixir.CoreTest do
 
     prompt = PromptBuilder.build_prompt(issue)
 
-    assert prompt =~ "You are working on a Linear issue."
-    assert prompt =~ "Identifier: MT-777"
+    assert prompt =~ "You are working on issue MT-777."
     assert prompt =~ "Title: Make fallback prompt useful"
     assert prompt =~ "Body:"
     assert prompt =~ "Include enough issue context to start working."
@@ -907,7 +906,7 @@ defmodule SymphonyElixir.CoreTest do
 
     prompt = PromptBuilder.build_prompt(issue)
 
-    assert prompt =~ "Identifier: MT-778"
+    assert prompt =~ "You are working on issue MT-778."
     assert prompt =~ "Title: Handle empty body"
     assert prompt =~ "No description provided."
   end
@@ -959,7 +958,7 @@ defmodule SymphonyElixir.CoreTest do
 
     prompt = PromptBuilder.build_prompt(issue, attempt: 2)
 
-    assert prompt =~ "You are working on a Linear ticket `MT-616`"
+    assert prompt =~ "You are working on tracker issue `MT-616`"
     assert prompt =~ "Issue context:"
     assert prompt =~ "Identifier: MT-616"
     assert prompt =~ "Title: Use rich templates for WORKFLOW.md"
