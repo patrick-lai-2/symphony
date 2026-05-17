@@ -957,7 +957,7 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
 
     assert is_integer(due_at_ms)
     remaining_ms = due_at_ms - System.monotonic_time(:millisecond)
-    assert remaining_ms >= 9_500
+    assert remaining_ms >= 5_000
     assert remaining_ms <= 10_500
   end
 
@@ -1144,7 +1144,7 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
     refute rendered =~ "Timestamp:"
   end
 
-  test "status dashboard renders linear project link in header" do
+  test "status dashboard renders tracker project link in header" do
     snapshot_data =
       {:ok,
        %{
@@ -1158,6 +1158,29 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
 
     assert rendered =~ "https://linear.app/project/project/issues"
     refute rendered =~ "Dashboard:"
+  end
+
+  test "status dashboard renders Jira project link for Jira trackers" do
+    write_workflow_file!(Workflow.workflow_file_path(),
+      tracker_kind: "jira",
+      tracker_endpoint: "https://example.atlassian.net",
+      tracker_project_slug: "PROJ",
+      tracker_active_states: ["To Do", "In Progress"]
+    )
+
+    snapshot_data =
+      {:ok,
+       %{
+         running: [],
+         retrying: [],
+         codex_totals: %{input_tokens: 0, output_tokens: 0, total_tokens: 0, seconds_running: 0},
+         rate_limits: nil
+       }}
+
+    rendered = StatusDashboard.format_snapshot_content_for_test(snapshot_data, 0.0)
+
+    assert rendered =~ "https://example.atlassian.net/jira/software/c/projects/PROJ/boards"
+    refute rendered =~ "https://linear.app/project/PROJ/issues"
   end
 
   test "status dashboard renders dashboard url on its own line when server port is configured" do

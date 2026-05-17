@@ -46,10 +46,12 @@ defmodule SymphonyElixir.Config.Schema do
 
     embedded_schema do
       field(:kind, :string)
-      field(:endpoint, :string, default: "https://api.linear.app/graphql")
+      field(:endpoint, :string)
       field(:api_key, :string)
       field(:project_slug, :string)
       field(:assignee, :string)
+      # `email` is required by Jira (basic auth uses email + API token).
+      field(:email, :string)
       field(:active_states, {:array, :string}, default: ["Todo", "In Progress"])
       field(:terminal_states, {:array, :string}, default: ["Closed", "Cancelled", "Canceled", "Duplicate", "Done"])
     end
@@ -59,7 +61,7 @@ defmodule SymphonyElixir.Config.Schema do
       schema
       |> cast(
         attrs,
-        [:kind, :endpoint, :api_key, :project_slug, :assignee, :active_states, :terminal_states],
+        [:kind, :endpoint, :api_key, :project_slug, :assignee, :email, :active_states, :terminal_states],
         empty_values: []
       )
     end
@@ -366,10 +368,31 @@ defmodule SymphonyElixir.Config.Schema do
   end
 
   defp finalize_settings(settings) do
+    tracker_endpoint_fallback =
+      case settings.tracker.kind do
+        "linear" -> "https://api.linear.app/graphql"
+        "jira" -> System.get_env("JIRA_ENDPOINT")
+        _ -> nil
+      end
+
+    tracker_api_key_fallback =
+      case settings.tracker.kind do
+        "jira" ->
+          System.get_env("JIRA_API_TOKEN") || System.get_env("ATLASSIAN_API_TOKEN")
+
+        _ ->
+          System.get_env("LINEAR_API_KEY")
+      end
+
+    tracker_email_fallback =
+      System.get_env("JIRA_EMAIL") || System.get_env("ATLASSIAN_EMAIL")
+
     tracker = %{
       settings.tracker
-      | api_key: resolve_secret_setting(settings.tracker.api_key, System.get_env("LINEAR_API_KEY")),
-        assignee: resolve_secret_setting(settings.tracker.assignee, System.get_env("LINEAR_ASSIGNEE"))
+      | endpoint: resolve_secret_setting(settings.tracker.endpoint, tracker_endpoint_fallback),
+        api_key: resolve_secret_setting(settings.tracker.api_key, tracker_api_key_fallback),
+        assignee: resolve_secret_setting(settings.tracker.assignee, System.get_env("LINEAR_ASSIGNEE")),
+        email: resolve_secret_setting(settings.tracker.email, tracker_email_fallback)
     }
 
     workspace = %{

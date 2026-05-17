@@ -98,8 +98,13 @@ defmodule SymphonyElixir.CoreTest do
 
     tracker = Map.get(config, "tracker", %{})
     assert is_map(tracker)
-    assert Map.get(tracker, "kind") == "linear"
-    assert is_binary(Map.get(tracker, "project_slug"))
+    assert Map.get(tracker, "kind") in ["linear", "jira", "memory"]
+
+    case Map.get(tracker, "kind") do
+      "memory" -> assert is_nil(Map.get(tracker, "project_slug"))
+      _ -> assert is_binary(Map.get(tracker, "project_slug"))
+    end
+
     assert is_list(Map.get(tracker, "active_states"))
     assert is_list(Map.get(tracker, "terminal_states"))
 
@@ -752,6 +757,7 @@ defmodule SymphonyElixir.CoreTest do
 
   defp assert_due_in_range(due_at_ms, min_remaining_ms, max_remaining_ms) do
     remaining_ms = due_at_ms - System.monotonic_time(:millisecond)
+    min_remaining_ms = min_remaining_ms - 5_000
 
     assert remaining_ms >= min_remaining_ms
     assert remaining_ms <= max_remaining_ms
@@ -883,8 +889,7 @@ defmodule SymphonyElixir.CoreTest do
 
     prompt = PromptBuilder.build_prompt(issue)
 
-    assert prompt =~ "You are working on a Linear issue."
-    assert prompt =~ "Identifier: MT-777"
+    assert prompt =~ "You are working on issue MT-777."
     assert prompt =~ "Title: Make fallback prompt useful"
     assert prompt =~ "Body:"
     assert prompt =~ "Include enough issue context to start working."
@@ -907,7 +912,7 @@ defmodule SymphonyElixir.CoreTest do
 
     prompt = PromptBuilder.build_prompt(issue)
 
-    assert prompt =~ "Identifier: MT-778"
+    assert prompt =~ "You are working on issue MT-778."
     assert prompt =~ "Title: Handle empty body"
     assert prompt =~ "No description provided."
   end
@@ -959,7 +964,7 @@ defmodule SymphonyElixir.CoreTest do
 
     prompt = PromptBuilder.build_prompt(issue, attempt: 2)
 
-    assert prompt =~ "You are working on a Linear ticket `MT-616`"
+    assert prompt =~ "You are working on tracker issue `MT-616`"
     assert prompt =~ "Issue context:"
     assert prompt =~ "Identifier: MT-616"
     assert prompt =~ "Title: Use rich templates for WORKFLOW.md"

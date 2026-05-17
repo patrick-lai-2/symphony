@@ -38,9 +38,14 @@ defmodule SymphonyElixir.Tracker do
 
   @spec adapter() :: module()
   def adapter do
-    case Config.settings!().tracker.kind do
-      "memory" -> SymphonyElixir.Tracker.Memory
-      _ -> SymphonyElixir.Linear.Adapter
-    end
+    # An explicit application override always wins so tests (and downstream
+    # users that ship custom adapters) can plug in any module that implements
+    # this behaviour.
+    Application.get_env(:symphony_elixir, :tracker_module) ||
+      case Config.settings!().tracker.kind do
+        "memory" -> SymphonyElixir.Tracker.Memory
+        "jira" -> SymphonyElixir.Jira.Adapter
+        _ -> SymphonyElixir.Linear.Adapter
+      end
   end
 end
