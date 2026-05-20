@@ -162,7 +162,8 @@ defmodule SymphonyElixir.Jira.Client do
         "created",
         "updated",
         "issuetype",
-        "parent"
+        "parent",
+        "issuelinks"
       ]
     }
 
@@ -280,7 +281,7 @@ defmodule SymphonyElixir.Jira.Client do
       branch_name: nil,
       url: build_browse_url(issue, key),
       assignee_id: get_in(fields, ["assignee", "accountId"]),
-      blocked_by: [],
+      blocked_by: extract_blockers(Map.get(fields, "issuelinks")),
       labels: extract_labels(fields),
       assigned_to_worker: true,
       created_at: parse_datetime(Map.get(fields, "created")),
@@ -340,6 +341,55 @@ defmodule SymphonyElixir.Jira.Client do
   end
 
   defp extract_labels(_fields), do: []
+
+  # In Jira, an issue link with type name "Blocks" describes the relationship
+  # between two issues. The current issue is "blocked by" the issue referenced
+  # via `inwardIssue` (Jira inward direction = "is blocked by"). We extract
+  # only those inward "Blocks" links so the orchestrator can defer dispatch
+  # until the blocker reaches a terminal state. Outward "Blocks" links (where
+  # the current issue blocks another) are intentionally ignored.
+  @doc false
+  @spec extract_blockers_for_test(term()) :: [map()]
+  def extract_blockers_for_test(links), do: extract_blockers(links)
+
+  defp extract_blockers(links) when is_list(links) do
+    Enum.flat_map(links, &extract_blocker_from_link/1)
+  end
+
+  defp extract_blockers(_), do: []
+
+  defp extract_blocker_from_link(link) when is_map(link) do
+    type_name = get_in(link, ["type", "name"])
+
+    cond do
+      not is_binary(type_name) ->
+        []
+
+      String.downcase(String.trim(type_name)) != "blocks" ->
+        []
+
+      is_map(link["inwardIssue"]) ->
+        case build_blocker(link["inwardIssue"]) do
+          %{identifier: identifier} = blocker when is_binary(identifier) -> [blocker]
+          _ -> []
+        end
+
+      true ->
+        []
+    end
+  end
+
+  defp extract_blocker_from_link(_), do: []
+
+  defp build_blocker(%{"key" => key} = blocker_issue) when is_binary(key) and key != "" do
+    %{
+      id: key,
+      identifier: key,
+      state: get_in(blocker_issue, ["fields", "status", "name"])
+    }
+  end
+
+  defp build_blocker(_), do: %{id: nil, identifier: nil, state: nil}
 
   defp parse_datetime(value) when is_binary(value) do
     case DateTime.from_iso8601(value) do
