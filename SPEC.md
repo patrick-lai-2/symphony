@@ -16,7 +16,7 @@ behavior.
 ## 1. Problem Statement
 
 Symphony is a long-running automation service that continuously reads work from an issue tracker
-(Linear in this specification version), creates an isolated workspace for each issue, and runs a
+(reference adapters: Linear, Jira), creates an isolated workspace for each issue, and runs a
 coding agent session for that issue inside the workspace.
 
 The service solves four operational problems:
@@ -129,15 +129,16 @@ Symphony is easiest to port when kept in these layers:
 4. `Execution Layer` (workspace + agent subprocess)
    - Filesystem lifecycle, workspace preparation, coding-agent protocol.
 
-5. `Integration Layer` (Linear adapter)
+5. `Integration Layer` (tracker adapter)
    - API calls and normalization for tracker data.
+   - Reference adapters: Linear and Jira; additional adapters MAY be implemented.
 
 6. `Observability Layer` (logs + OPTIONAL status surface)
    - Operator visibility into orchestrator and agent behavior.
 
 ### 3.3 External Dependencies
 
-- Issue tracker API (Linear for `tracker.kind: linear` in this specification version).
+- Issue tracker API (reference adapters: Linear for `tracker.kind: linear`, Jira for `tracker.kind: jira`).
 - Local filesystem for workspaces and logs.
 - OPTIONAL workspace population tooling (for example Git CLI, if used).
 - Coding-agent executable that supports the targeted Codex app-server mode.
@@ -349,15 +350,23 @@ Fields:
 
 - `kind` (string)
   - REQUIRED for dispatch.
-  - Current supported value: `linear`
+  - Reference values: `linear`, `jira`. Implementations MAY add more.
 - `endpoint` (string)
-  - Default for `tracker.kind == "linear"`: `https://api.linear.app/graphql`
+  - Default for `tracker.kind == "linear"`: `https://api.linear.app/graphql`.
+  - REQUIRED for `tracker.kind == "jira"` (the Jira site URL, for example
+    `https://your-domain.atlassian.net`).
 - `api_key` (string)
   - MAY be a literal token or `$VAR_NAME`.
   - Canonical environment variable for `tracker.kind == "linear"`: `LINEAR_API_KEY`.
+  - Canonical environment variables for `tracker.kind == "jira"`: `JIRA_API_TOKEN`, then
+    `ATLASSIAN_API_TOKEN`.
   - If `$VAR_NAME` resolves to an empty string, treat the key as missing.
+- `email` (string)
+  - REQUIRED for `tracker.kind == "jira"`; ignored by other tracker kinds.
+  - Canonical environment variables: `JIRA_EMAIL`, then `ATLASSIAN_EMAIL`.
 - `project_slug` (string)
-  - REQUIRED for dispatch when `tracker.kind == "linear"`.
+  - REQUIRED for dispatch when `tracker.kind` selects an adapter that scopes work to a project
+    (for example Linear `slugId` or Jira project key).
 - `active_states` (list of strings)
   - Default: `Todo`, `In Progress`
 - `terminal_states` (list of strings)
@@ -475,7 +484,7 @@ Template input variables:
 Fallback prompt behavior:
 
 - If the workflow prompt body is empty, the runtime MAY use a minimal default prompt
-  (`You are working on an issue from Linear.`).
+  (`You are working on a tracker issue.`).
 - Workflow file read/parse failures are configuration/validation errors and SHOULD NOT silently fall
   back to a prompt.
 
@@ -559,9 +568,11 @@ Per-tick dispatch validation:
 Validation checks:
 
 - Workflow file can be loaded and parsed.
-- `tracker.kind` is present and supported.
+- `tracker.kind` is present and supported by an installed adapter.
 - `tracker.api_key` is present after `$` resolution.
-- `tracker.project_slug` is present when REQUIRED by the selected tracker kind.
+- `tracker.project_slug` is present when REQUIRED by the selected tracker adapter.
+- Tracker-specific fields REQUIRED by the selected adapter are present (for example
+  `tracker.endpoint` and `tracker.email` for `tracker.kind == "jira"`).
 - `codex.command` is present and non-empty.
 
 ### 6.4 Core Config Fields Summary (Cheat Sheet)
@@ -570,10 +581,16 @@ This section is intentionally redundant so a coding agent can implement the conf
 Extension fields are documented in the extension section that defines them. Core conformance does
 not require recognizing or validating extension fields unless that extension is implemented.
 
-- `tracker.kind`: string, REQUIRED, currently `linear`
-- `tracker.endpoint`: string, default `https://api.linear.app/graphql` when `tracker.kind=linear`
-- `tracker.api_key`: string or `$VAR`, canonical env `LINEAR_API_KEY` when `tracker.kind=linear`
-- `tracker.project_slug`: string, REQUIRED when `tracker.kind=linear`
+- `tracker.kind`: string, REQUIRED. Reference values: `linear`, `jira`.
+- `tracker.endpoint`: string. Default `https://api.linear.app/graphql` when `tracker.kind=linear`.
+  REQUIRED for `tracker.kind=jira` (Jira site URL).
+- `tracker.api_key`: string or `$VAR`.
+  - `tracker.kind=linear`: canonical env `LINEAR_API_KEY`.
+  - `tracker.kind=jira`: canonical env `JIRA_API_TOKEN`, then `ATLASSIAN_API_TOKEN`.
+- `tracker.email`: string or `$VAR`. REQUIRED for `tracker.kind=jira`. Canonical env
+  `JIRA_EMAIL`, then `ATLASSIAN_EMAIL`. Ignored by other tracker kinds.
+- `tracker.project_slug`: string, REQUIRED when the selected adapter scopes work to a project
+  (for example Linear `slugId` or Jira project key).
 - `tracker.active_states`: list of strings, default `["Todo", "In Progress"]`
 - `tracker.terminal_states`: list of strings, default `["Closed", "Cancelled", "Canceled", "Duplicate", "Done"]`
 - `polling.interval_ms`: integer, default `30000`

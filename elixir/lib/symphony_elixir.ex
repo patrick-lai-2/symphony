@@ -21,6 +21,7 @@ defmodule SymphonyElixir.Application do
 
   @impl true
   def start(_type, _args) do
+    maybe_load_os_ca_certs()
     :ok = SymphonyElixir.LogFile.configure()
 
     children = [
@@ -42,6 +43,14 @@ defmodule SymphonyElixir.Application do
   @impl true
   def stop(_state) do
     SymphonyElixir.StatusDashboard.render_offline_status()
+    :ok
+  end
+
+  defp maybe_load_os_ca_certs do
+    if function_exported?(:public_key, :cacerts_load, 0) do
+      _ = :public_key.cacerts_load()
+    end
+
     :ok
   end
 end
